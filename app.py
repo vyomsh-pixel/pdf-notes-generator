@@ -6,7 +6,7 @@ import datetime
 
 # ── CONFIG ───────────────────────────────────────────────────────────────────
 CHUNK_SIZE = 12000
-MODEL = "mistralai/mistral-7b-instruct"
+MODEL = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
 API_TIMEOUT = 60
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
