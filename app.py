@@ -102,7 +102,7 @@ with st.sidebar:
             st.session_state.manual_api_key = manual_key
 
     st.divider()
-    st.markdown("**Model:** `mistral-7b-instruct`")
+    st.markdown("**Model:** `nemotron`")
     st.markdown("**Powered by** [OpenRouter](https://openrouter.ai)")
 
     if "history" in st.session_state and st.session_state.history:
