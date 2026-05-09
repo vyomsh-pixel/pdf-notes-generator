@@ -75,14 +75,57 @@ def log_to_history(filename, mode, total_chunks):
 
 # ── PAGE ──────────────────────────────────────────────────────────────────────
 st.set_page_config(page_title="PDF Notes Generator", page_icon="📄", layout="centered")
-st.title("📄 PDF Notes Generator")
-st.caption("Upload a PDF → get clean study notes or exam questions instantly.")
+st.markdown("""
+<div style='text-align: center; padding: 20px 0 30px 0;'>
+    <h1 style='font-size: 3.2rem; margin-bottom: 0;'>📄 PDF Notes Generator</h1>
+    <p style='font-size: 1.2rem; color: #9CA3AF;'>
+        Transform dense PDFs into structured notes and exam-ready questions instantly.
+    </p>
+</div>
+""", unsafe_allow_html=True)
+st.markdown("""
+<style>
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+    max-width: 900px;
+}
 
+.stButton > button {
+    width: 100%;
+    border-radius: 14px;
+    height: 3.2em;
+    font-size: 18px;
+    font-weight: bold;
+    background: linear-gradient(90deg, #4F46E5, #7C3AED);
+    color: white;
+    border: none;
+    transition: 0.3s ease;
+}
+
+.stButton > button:hover {
+    transform: scale(1.02);
+}
+
+[data-testid="stMetricValue"] {
+    font-size: 2rem;
+    font-weight: bold;
+}
+
+[data-testid="stSidebar"] {
+    background-color: #111827;
+}
+
+h1, h2, h3 {
+    font-family: sans-serif;
+}
+</style>
+""", unsafe_allow_html=True)
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.header("⚙️ Settings")
-
-    key_in_secrets = False
+    st.markdown("## 🚀 Study Assistant")
+    st.caption("Your AI-powered revision weapon.")
+    st.divider()
     try:
         _ = st.secrets["OPENROUTER_API_KEY"]
         key_in_secrets = True
@@ -159,7 +202,7 @@ if uploaded_file:
         with col2:
             num_questions = st.number_input("Number of Questions", min_value=1, max_value=20, value=5)
 
-    if st.button("🚀 Generate", use_container_width=True, type="primary"):
+    if st.button("GENERATE", use_container_width=True, type="primary"):
         final_output = ""
 
         if mode == "Notes":
