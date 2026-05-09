@@ -6,22 +6,17 @@ import datetime
 
 # ── CONFIG ───────────────────────────────────────────────────────────────────
 CHUNK_SIZE = 12000
-MODEL = "mistralai/mistral-7b-instruct"   # stable free model on OpenRouter
-API_TIMEOUT = 60                           # seconds before giving up on a request
+MODEL = "mistralai/mistral-7b-instruct"
+API_TIMEOUT = 60
 
-# ── SECRETS ──────────────────────────────────────────────────────────────────
+# ── HELPERS ───────────────────────────────────────────────────────────────────
 def get_api_key():
-    """
-    Priority:
-    1. st.secrets (Streamlit Cloud deployment)
-    2. Manual input in sidebar (lets others use their own key)
-    """
     try:
         return st.secrets["OPENROUTER_API_KEY"]
     except Exception:
         return st.session_state.get("manual_api_key", "")
 
-# ── CORE FUNCTIONS ────────────────────────────────────────────────────────────
+
 def split_into_chunks(text, chunk_size=CHUNK_SIZE):
     chunks = []
     while len(text) > chunk_size:
@@ -42,7 +37,7 @@ def call_api(prompt, api_key):
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://pdf-notes-generator.streamlit.app",
+                "HTTP-Referer": "https://pdf-notes-generatorgit.streamlit.app",
                 "X-Title": "PDF Notes Generator"
             },
             json={
@@ -54,9 +49,9 @@ def call_api(prompt, api_key):
         )
         result = response.json()
     except requests.exceptions.Timeout:
-        return None, "Request timed out. The model took too long to respond. Try again."
+        return None, "Request timed out. Try again."
     except requests.exceptions.ConnectionError:
-        return None, "Connection error. Check your internet and try again."
+        return None, "Connection error. Check your internet."
     except Exception as e:
         return None, f"Unexpected error: {str(e)}"
 
@@ -67,26 +62,19 @@ def call_api(prompt, api_key):
     return result["choices"][0]["message"]["content"], None
 
 
-def log_to_history(filename, mode, total_chunks, output):
-    """Store history in session_state instead of writing to disk."""
+def log_to_history(filename, mode, total_chunks):
     if "history" not in st.session_state:
         st.session_state.history = []
     st.session_state.history.append({
         "time": datetime.datetime.now().strftime('%Y-%m-%d %H:%M'),
         "file": filename,
         "mode": mode,
-        "chunks": total_chunks,
-        "output": output
+        "chunks": total_chunks
     })
 
 
-# ── PAGE SETUP ────────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="PDF Notes Generator",
-    page_icon="📄",
-    layout="centered"
-)
-
+# ── PAGE ──────────────────────────────────────────────────────────────────────
+st.set_page_config(page_title="PDF Notes Generator", page_icon="📄", layout="centered")
 st.title("📄 PDF Notes Generator")
 st.caption("Upload a PDF → get clean study notes or exam questions instantly.")
 
@@ -94,11 +82,16 @@ st.caption("Upload a PDF → get clean study notes or exam questions instantly."
 with st.sidebar:
     st.header("⚙️ Settings")
 
-    # Only show manual key input if no key is in secrets
+    key_in_secrets = False
     try:
-        st.secrets["OPENROUTER_API_KEY"]
-        st.success("API key loaded ✓")
+        _ = st.secrets["OPENROUTER_API_KEY"]
+        key_in_secrets = True
     except Exception:
+        pass
+
+    if key_in_secrets:
+        st.success("API key loaded ✓")
+    else:
         st.warning("No API key configured.")
         manual_key = st.text_input(
             "Enter your OpenRouter API key",
@@ -112,24 +105,24 @@ with st.sidebar:
     st.markdown("**Model:** `mistral-7b-instruct`")
     st.markdown("**Powered by** [OpenRouter](https://openrouter.ai)")
 
-    # Session history
     if "history" in st.session_state and st.session_state.history:
         st.divider()
         st.subheader("📋 Session History")
         for entry in reversed(st.session_state.history[-5:]):
             st.markdown(f"- `{entry['time']}` · **{entry['file']}** · {entry['mode']}")
 
-# ── MAIN FLOW ─────────────────────────────────────────────────────────────────
+# ── MAIN ──────────────────────────────────────────────────────────────────────
 api_key = get_api_key()
 
 if not api_key:
-    st.info("👈 Enter your OpenRouter API key in the sidebar to get started.")
+    st.info(" Enter your OpenRouter API key in the sidebar to get started.")
     st.stop()
 
 uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
 
 if uploaded_file:
     with pdfplumber.open(uploaded_file) as pdf:
+        total_pages = len(pdf.pages)
         text = ""
         for page in pdf.pages:
             t = page.extract_text()
@@ -140,7 +133,7 @@ if uploaded_file:
     clean_text = re.sub(r' +', ' ', clean_text)
 
     if not clean_text.strip():
-        st.error("❌ No text found. This PDF may be image-based or scanned.")
+        st.error("No text found. This PDF may be image-based or scanned.")
         st.stop()
 
     chunks = split_into_chunks(clean_text)
@@ -148,7 +141,7 @@ if uploaded_file:
 
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("Pages", len(pdf.pages) if hasattr(pdf, 'pages') else "—")
+        st.metric("Pages", total_pages)
     with col2:
         st.metric("Sections", total_chunks)
 
@@ -157,6 +150,8 @@ if uploaded_file:
 
     mode = st.selectbox("Select Mode", ["Notes", "Generate Questions"])
 
+    marks = None
+    num_questions = None
     if mode == "Generate Questions":
         col1, col2 = st.columns(2)
         with col1:
@@ -164,17 +159,15 @@ if uploaded_file:
         with col2:
             num_questions = st.number_input("Number of Questions", min_value=1, max_value=20, value=5)
 
-    # ── GENERATE ─────────────────────────────────────────────────────────────
     if st.button("🚀 Generate", use_container_width=True, type="primary"):
+        final_output = ""
 
-        # NOTES MODE
         if mode == "Notes":
             chunk_outputs = []
             progress = st.progress(0, text="Starting...")
 
             for i, chunk in enumerate(chunks):
                 progress.progress(i / total_chunks, text=f"Processing section {i+1} of {total_chunks}...")
-
                 prompt = f"""Convert into structured study notes:
 
 - Key Points (bullet list)
@@ -187,16 +180,14 @@ Rules:
 - Keep output concise
 
 Text:
-{chunk}
-"""
+{chunk}"""
                 output, error = call_api(prompt, api_key)
                 if error:
-                    st.error(f"❌ API Error on section {i+1}: {error}")
+                    st.error(f" API Error on section {i+1}: {error}")
                     st.stop()
                 chunk_outputs.append(output)
 
             progress.progress(0.95, text="Merging sections...")
-
             combined = "\n\n---\n\n".join(chunk_outputs)
             merge_prompt = f"""Below are study notes from multiple sections of the same document.
 
@@ -212,17 +203,15 @@ Rules:
 - Do not add anything not present in the input
 
 Notes to merge:
-{combined}
-"""
+{combined}"""
             final_output, error = call_api(merge_prompt, api_key)
             if error:
-                st.error(f"❌ API Error during merge: {error}")
+                st.error(f" API Error during merge: {error}")
                 st.stop()
 
             progress.progress(1.0, text="Done!")
             progress.empty()
 
-        # QUESTIONS MODE
         else:
             base = num_questions // total_chunks
             remainder = num_questions % total_chunks
@@ -235,7 +224,6 @@ Notes to merge:
                 if q_count == 0:
                     continue
                 progress.progress(i / total_chunks, text=f"Processing section {i+1} of {total_chunks}...")
-
                 prompt = f"""Generate {q_count} exam-oriented questions of {marks} marks.
 
 IMPORTANT RULES:
@@ -253,11 +241,10 @@ GROUNDING RULES:
 - If unsure, stick strictly to given content
 
 Text:
-{chunk}
-"""
+{chunk}"""
                 output, error = call_api(prompt, api_key)
                 if error:
-                    st.error(f"❌ API Error on section {i+1}: {error}")
+                    st.error(f" API Error on section {i+1}: {error}")
                     st.stop()
                 all_questions.append(output)
 
@@ -265,18 +252,13 @@ Text:
             progress.empty()
             final_output = "\n\n".join(all_questions)
 
-        # OUTPUT
         if len(final_output.strip()) < 50:
-            st.warning("⚠️ Output seems too short. The model may have returned incomplete results.")
-            if st.button("🔄 Retry"):
-                st.rerun()
+            st.warning("⚠️ Output seems too short. Try again.")
         else:
-            log_to_history(uploaded_file.name, mode, total_chunks, final_output)
-
-            st.success("✅ Done!")
+            log_to_history(uploaded_file.name, mode, total_chunks)
+            st.success(" Done!")
             st.subheader("Output")
             st.markdown(final_output)
-
             st.download_button(
                 label="⬇️ Download Output",
                 data=final_output,
