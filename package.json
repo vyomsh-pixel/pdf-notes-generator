@@ -1,0 +1,7 @@
+{
+  "name": "pdf-notes-generator",
+  "private": true,
+  "scripts": {
+    "build": "node build.js"
+  }
+}

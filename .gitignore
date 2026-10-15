@@ -19,7 +19,8 @@ history.txt
 .DS_Store
 Thumbs.db
 
-# IDE
-.vscode/
-.idea/
-*.swp
+# Node / Vite
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
